@@ -1,0 +1,130 @@
+[2026-05-11 11:56:12] Registered for Windows startup.
+[2026-05-11 11:56:12] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 11:56:12] Sending first heartbeat now…
+[2026-05-11 11:56:12] Next heartbeat in 60s…
+[2026-05-11 11:56:12] System tray active. Right-click the icon to quit.
+[2026-05-11 11:56:14] ✓ tick accepted (201)
+[2026-05-11 11:57:12] ● WORKING  (idle 11s)
+[2026-05-11 11:57:12] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 11:57:14] ✓ tick accepted (201)
+[2026-05-11 11:58:14] ● WORKING  (idle 0s)
+[2026-05-11 11:58:14] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 11:58:15] ✓ tick accepted (201)
+[2026-05-11 11:59:15] ● WORKING  (idle 0s)
+[2026-05-11 11:59:15] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 11:59:16] ✓ tick accepted (201)
+[2026-05-11 12:00:16] ● WORKING  (idle 3s)
+[2026-05-11 12:00:16] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:00:18] ✓ tick accepted (201)
+[2026-05-11 12:01:18] ● WORKING  (idle 39s)
+[2026-05-11 12:01:18] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:01:19] ✓ tick accepted (201)
+[2026-05-11 12:02:19] ● WORKING  (idle 100s)
+[2026-05-11 12:02:19] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:02:21] ✓ tick accepted (201)
+[2026-05-11 12:03:14] Registered for Windows startup.
+[2026-05-11 12:03:14] Sending first heartbeat now…
+[2026-05-11 12:03:14] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:03:14] Next heartbeat in 60s…
+[2026-05-11 12:03:14] System tray active. Right-click the icon to quit.
+[2026-05-11 12:03:16] ✓ tick accepted (201)
+[2026-05-11 12:04:14] ● WORKING  (idle 6s)
+[2026-05-11 12:04:14] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:04:16] ✓ tick accepted (201)
+[2026-05-11 12:05:16] ● WORKING  (idle 67s)
+[2026-05-11 12:05:16] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:05:17] ✓ tick accepted (201)
+[2026-05-11 12:06:17] ● WORKING  (idle 128s)
+[2026-05-11 12:06:17] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:06:18] ✓ tick accepted (201)
+[2026-05-11 12:07:18] ● WORKING  (idle 189s)
+[2026-05-11 12:07:18] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:07:20] ✓ tick accepted (201)
+[2026-05-11 12:08:20] ● WORKING  (idle 14s)
+[2026-05-11 12:08:20] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:08:21] ✓ tick accepted (201)
+[2026-05-11 12:09:21] ● WORKING  (idle 0s)
+[2026-05-11 12:09:21] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:09:22] ✓ tick accepted (201)
+[2026-05-11 12:10:22] ● WORKING  (idle 1s)
+[2026-05-11 12:10:22] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:10:24] ✓ tick accepted (201)
+[2026-05-11 12:11:24] ● WORKING  (idle 0s)
+[2026-05-11 12:11:24] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:11:25] ✓ tick accepted (201)
+[2026-05-11 12:12:25] ● WORKING  (idle 2s)
+[2026-05-11 12:12:25] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:12:26] ✓ tick accepted (201)
+[2026-05-11 12:13:26] ● WORKING  (idle 27s)
+[2026-05-11 12:13:26] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:13:28] ✓ tick accepted (201)
+[2026-05-11 12:14:28] ● WORKING  (idle 24s)
+[2026-05-11 12:14:28] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:14:30] ✓ tick accepted (201)
+[2026-05-11 12:15:30] ● WORKING  (idle 0s)
+[2026-05-11 12:15:30] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:15:31] ✓ tick accepted (201)
+[2026-05-11 12:16:31] ● WORKING  (idle 0s)
+[2026-05-11 12:16:31] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:16:32] ✓ tick accepted (201)
+[2026-05-11 12:17:32] ● WORKING  (idle 1s)
+[2026-05-11 12:17:32] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:17:34] ✓ tick accepted (201)
+[2026-05-11 12:18:34] ● WORKING  (idle 0s)
+[2026-05-11 12:18:34] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:18:35] ✓ tick accepted (201)
+[2026-05-11 12:19:35] ● WORKING  (idle 0s)
+[2026-05-11 12:19:35] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:19:37] ✓ tick accepted (201)
+[2026-05-11 12:20:37] ● WORKING  (idle 0s)
+[2026-05-11 12:20:37] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:20:38] ✓ tick accepted (201)
+[2026-05-11 12:21:38] ● WORKING  (idle 15s)
+[2026-05-11 12:21:38] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:21:39] ✓ tick accepted (201)
+[2026-05-11 12:22:39] ● WORKING  (idle 22s)
+[2026-05-11 12:22:39] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:22:41] ✓ tick accepted (201)
+[2026-05-11 12:23:41] ● WORKING  (idle 1s)
+[2026-05-11 12:23:41] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:23:42] ✓ tick accepted (201)
+[2026-05-11 12:24:42] ● WORKING  (idle 0s)
+[2026-05-11 12:24:42] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:24:44] ✓ tick accepted (201)
+[2026-05-11 12:25:44] ● WORKING  (idle 45s)
+[2026-05-11 12:25:44] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:25:45] ✓ tick accepted (201)
+[2026-05-11 12:26:45] ● WORKING  (idle 0s)
+[2026-05-11 12:26:45] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:26:47] ✓ tick accepted (201)
+[2026-05-11 12:27:48] ● WORKING  (idle 5s)
+[2026-05-11 12:27:48] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:28:55] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:28:55] Sending first heartbeat now…
+[2026-05-11 12:28:55] Next heartbeat in 60s…
+[2026-05-11 12:28:55] System tray active. Right-click the icon to quit.
+[2026-05-11 12:28:56] ✓ tick accepted (201)
+[2026-05-11 12:32:03] Registered for Windows startup.
+[2026-05-11 12:32:03] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:32:03] Sending first heartbeat now…
+[2026-05-11 12:32:03] Next heartbeat in 60s…
+[2026-05-11 12:32:03] System tray active. Right-click the icon to quit.
+[2026-05-11 12:32:05] ✓ tick accepted (201)
+[2026-05-11 12:33:03] ● WORKING  (idle 51s)
+[2026-05-11 12:33:03] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:33:05] ✓ tick accepted (201)
+[2026-05-11 12:34:05] ● WORKING  (idle 0s)
+[2026-05-11 12:34:05] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:34:06] ✓ tick accepted (201)
+[2026-05-11 12:35:06] ● WORKING  (idle 0s)
+[2026-05-11 12:35:06] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:35:08] ✓ tick accepted (201)
+[2026-05-11 12:36:08] ● WORKING  (idle 19s)
+[2026-05-11 12:36:08] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:36:09] ✓ tick accepted (201)
+[2026-05-11 12:37:09] ● WORKING  (idle 4s)
+[2026-05-11 12:37:09] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:37:10] ✓ tick accepted (201)
+[2026-05-11 12:38:10] ● WORKING  (idle 5s)
+[2026-05-11 12:38:10] → POST https://api.blueorbit.solar/api/tracker/push  user=KGP  status=working
+[2026-05-11 12:38:12] ✓ tick accepted (201)

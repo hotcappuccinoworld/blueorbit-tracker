@@ -1,0 +1,6 @@
+{
+  "serverUrl": "https://api.blueorbit.solar/api",
+  "apiKey": "blueorbit",
+  "userName": "",
+  "version": "1.2.0"
+}

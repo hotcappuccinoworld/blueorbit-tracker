@@ -666,8 +666,11 @@ def _timeline_main(cfg: dict):
 
     date_lbl = tk.Label(foot, text="", font=("Segoe UI", 10, "bold"),
                         bg=WHITE, fg=TEXT, padx=10, pady=5,
-                        highlightbackground=BORDER2, highlightthickness=1)
+                        highlightbackground=BORDER2, highlightthickness=1,
+                        cursor="hand2")
     date_lbl.pack(side="left", padx=(0, 4))
+    date_lbl.bind("<Enter>", lambda e: date_lbl.config(bg=BG_TL))
+    date_lbl.bind("<Leave>", lambda e: date_lbl.config(bg=WHITE))
 
     next_btn = _nav_btn("›", lambda: _change_date(+1))
 
@@ -833,6 +836,100 @@ def _timeline_main(cfg: dict):
         _load()
 
     today_btn.config(command=_go_today)
+
+    def _show_cal_picker():
+        from calendar import monthcalendar, month_abbr as _mabb
+        cv = [state["date"].year, state["date"].month]
+
+        top = tk.Toplevel(root)
+        top.overrideredirect(True)
+        top.configure(bg=BORDER)
+        top.attributes("-topmost", True)
+
+        inner = tk.Frame(top, bg=WHITE, padx=6, pady=6)
+        inner.pack(padx=1, pady=1)
+
+        def _render():
+            for w in inner.winfo_children():
+                w.destroy()
+
+            # Header: ‹ Month Year ›
+            hdr = tk.Frame(inner, bg=WHITE)
+            hdr.pack(fill="x", pady=(0, 6))
+
+            def _pm():
+                cv[1] -= 1
+                if cv[1] == 0: cv[0] -= 1; cv[1] = 12
+                _render()
+            def _nm():
+                cv[1] += 1
+                if cv[1] == 13: cv[0] += 1; cv[1] = 1
+                _render()
+
+            tk.Button(hdr, text="‹", command=_pm, bg=WHITE, fg=TEXT2,
+                      relief="flat", bd=0, font=("Segoe UI", 13),
+                      cursor="hand2", width=2).pack(side="left")
+            tk.Label(hdr, text=f"{_mabb[cv[1]]} {cv[0]}",
+                     font=("Segoe UI", 10, "bold"), bg=WHITE, fg=TEXT,
+                     width=10, anchor="center").pack(side="left", expand=True)
+            tk.Button(hdr, text="›", command=_nm, bg=WHITE, fg=TEXT2,
+                      relief="flat", bd=0, font=("Segoe UI", 13),
+                      cursor="hand2", width=2).pack(side="right")
+
+            # Weekday headers
+            drow = tk.Frame(inner, bg=WHITE)
+            drow.pack(fill="x")
+            for d in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]:
+                tk.Label(drow, text=d, width=3, font=("Segoe UI", 8, "bold"),
+                         bg=WHITE, fg=MUTED, anchor="center").pack(side="left")
+            tk.Frame(inner, bg=BORDER2, height=1).pack(fill="x", pady=(3, 2))
+
+            # Day grid
+            today  = datetime.now(JST).date()
+            sel    = state["date"]
+            for week in monthcalendar(cv[0], cv[1]):
+                wrow = tk.Frame(inner, bg=WHITE)
+                wrow.pack(fill="x")
+                for day in week:
+                    if day == 0:
+                        tk.Label(wrow, text="", width=3, bg=WHITE).pack(side="left")
+                    else:
+                        d = _date(cv[0], cv[1], day)
+                        is_sel   = d == sel
+                        is_today = d == today
+                        is_fut   = d > today
+                        if is_sel:
+                            bg, fg, fw = BLUE, WHITE, "bold"
+                        elif is_today:
+                            bg, fg, fw = BG_TL, BLUE, "bold"
+                        else:
+                            bg, fg, fw = WHITE, MUTED if is_fut else TEXT2, "normal"
+                        tk.Button(wrow, text=str(day), width=3,
+                                  bg=bg, fg=fg, relief="flat", bd=0,
+                                  font=("Segoe UI", 9, fw),
+                                  cursor="" if is_fut else "hand2",
+                                  state="disabled" if is_fut else "normal",
+                                  command=lambda dd=d: _pick(dd)
+                                  ).pack(side="left")
+
+            # Position popup below date label
+            top.update_idletasks()
+            bx = date_lbl.winfo_rootx()
+            by = date_lbl.winfo_rooty() + date_lbl.winfo_height() + 4
+            pw = top.winfo_reqwidth()
+            sx = min(bx, root.winfo_screenwidth() - pw - 10)
+            top.geometry(f"+{sx}+{by}")
+
+        def _pick(d):
+            top.destroy()
+            state["date"] = d
+            _load()
+
+        top.bind("<FocusOut>", lambda e: top.destroy() if e.widget is top else None)
+        _render()
+        root.after(50, top.focus_set)
+
+    date_lbl.bind("<Button-1>", lambda e: _show_cal_picker())
 
     def _auto_refresh():
         if state["date"] == datetime.now(JST).date():

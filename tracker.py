@@ -39,9 +39,20 @@ JST            = timezone(timedelta(hours=9))  # Japan Standard Time
 _PROCESS_QUERY_LIMITED = 0x1000
 
 # ── Shared state ─────────────────────────────────────────────────────
-_status     = "working"
-_active_app = ""
-_tray       = [None]
+_status         = "working"
+_active_app     = ""
+_tray           = [None]
+_mutex_handle   = None   # keeps the singleton mutex alive for the process lifetime
+_timeline_root  = [None] # reference to the open timeline window (if any)
+
+
+# ── Single-instance guard ─────────────────────────────────────────────
+def _acquire_single_instance() -> bool:
+    """Create a named kernel mutex. Returns False if another instance already holds it."""
+    global _mutex_handle
+    _mutex_handle = ctypes.windll.kernel32.CreateMutexW(
+        None, False, "Global\\BlueOrbitTrackerSingleton_v1")
+    return ctypes.windll.kernel32.GetLastError() != 183  # 183 = ERROR_ALREADY_EXISTS
 
 
 # ── Windows API helpers (no global hooks, AV-safe) ───────────────────
@@ -428,6 +439,17 @@ def _group_ticks(ticks: list, date_str: str) -> list:
 
 
 def _show_timeline(cfg: dict):
+    existing = _timeline_root[0]
+    if existing is not None:
+        try:
+            def _bring_front():
+                existing.deiconify()
+                existing.lift()
+                existing.focus_force()
+            existing.after(0, _bring_front)
+            return
+        except Exception:
+            _timeline_root[0] = None
     threading.Thread(target=_timeline_main, args=(cfg,), daemon=True).start()
 
 
@@ -435,239 +457,373 @@ def _timeline_main(cfg: dict):
     import tkinter as tk
     from tkinter import ttk
 
-    BG      = "#0f172a"
-    BG2     = "#1e293b"
-    BORDER  = "#334155"
-    TEXT    = "#f1f5f9"
+    # ── Colors ────────────────────────────────────────────
+    WHITE   = "#ffffff"          # header card + table rows
+    BG_WIN  = "#edf2ff"          # window background (light blue)
+    BG_TL   = "#e4edff"          # timeline section + footer
+    BG_IDLE = "#fff0f3"          # idle row tint
+    BORDER  = "#b4ccf5"          # outer window border ring
+    BORDER2 = "#d4e4ff"          # inner section dividers
+    TEXT    = "#0f172a"
+    TEXT2   = "#374151"
     MUTED   = "#94a3b8"
+    MUTED2  = "#a0b4d6"
     BLUE    = "#2563eb"
+    BLUE_L  = "#eff6ff"
+    BLUE_B  = "#bfdbfe"
     RED     = "#ef4444"
-    BLUE_BG = "#1e3a8a"
+    RED_L   = "#fef2f2"
+    RED_B   = "#fecaca"
+    ORANGE  = "#f97316"
 
-    state = {"date": datetime.now(JST).date()}
+    TICK_S = 60
 
+    state    = {"date": datetime.now(JST).date(), "segs": []}
+    drag_d   = {"x": 0, "y": 0}
+
+    acc_color        = BLUE if _status == "working" else (RED if _status == "idle" else MUTED)
+    status_lbl_text  = _status.capitalize() if _status in ("working", "idle") else "Offline"
+
+    # ── Borderless window ─────────────────────────────────
     root = tk.Tk()
-    root.title(f"My Timeline — {cfg['userName']}")
-    root.configure(bg=BG)
-    root.minsize(700, 460)
+    root.overrideredirect(True)
+    root.configure(bg=BORDER)            # visible as 1-px border ring
+    root.minsize(720, 480)
     root.resizable(True, True)
-    root.update_idletasks()
-    w, h = 760, 540
+    w, h = 840, 570
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+    _timeline_root[0] = root
+
+    # Container (1-px inset = border ring)
+    C = tk.Frame(root, bg=BG_WIN)
+    C.pack(fill="both", expand=True, padx=1, pady=1)
+
+    # ── Drag logic (bound to header area) ─────────────────
+    def _drag_start(e):
+        drag_d["x"] = e.x_root - root.winfo_x()
+        drag_d["y"] = e.y_root - root.winfo_y()
+    def _drag_move(e):
+        root.geometry(f"+{e.x_root - drag_d['x']}+{e.y_root - drag_d['y']}")
+
+    # ── 3-px accent bar (also drag handle) ────────────────
+    acc_bar = tk.Frame(C, bg=acc_color, height=3, cursor="fleur")
+    acc_bar.pack(fill="x")
+    acc_bar.bind("<ButtonPress-1>",   _drag_start)
+    acc_bar.bind("<B1-Motion>",       _drag_move)
 
     # ── Header ────────────────────────────────────────────
-    hdr = tk.Frame(root, bg=BG, padx=18, pady=14)
+    hdr = tk.Frame(C, bg=WHITE, padx=18, pady=13, cursor="fleur")
     hdr.pack(fill="x")
+    hdr.bind("<ButtonPress-1>", _drag_start)
+    hdr.bind("<B1-Motion>",     _drag_move)
 
-    tk.Label(hdr, text="My Timeline",
-             font=("Segoe UI", 15, "bold"), bg=BG, fg=TEXT).pack(side="left")
-    tk.Label(hdr, text=f"  {cfg['userName']}  (JST)",
-             font=("Segoe UI", 11), bg=BG, fg=MUTED).pack(side="left", pady=2)
+    # Avatar canvas
+    initials = "".join(p[0].upper() for p in cfg["userName"].split()[:2] if p) or "?"
+    avt = tk.Canvas(hdr, width=44, height=44, bg=WHITE, highlightthickness=0, cursor="fleur")  # hdr is WHITE
+    avt.pack(side="left", padx=(0, 12))
+    avt.create_rectangle(0, 0, 44, 44, fill=BLUE, outline="")
+    avt.create_text(22, 22, text=initials, fill="white", font=("Segoe UI", 14, "bold"))
+    avt.create_oval(30, 30, 44, 44, fill="white", outline="white", width=3)
+    avt.create_oval(32, 32, 42, 42, fill=acc_color, outline="")
+    avt.bind("<ButtonPress-1>", _drag_start)
+    avt.bind("<B1-Motion>",     _drag_move)
 
-    nav = tk.Frame(hdr, bg=BG)
-    nav.pack(side="right")
+    # Name + badge
+    nf = tk.Frame(hdr, bg=WHITE, cursor="fleur")
+    nf.pack(side="left", fill="y")
+    nf.bind("<ButtonPress-1>", _drag_start)
+    nf.bind("<B1-Motion>",     _drag_move)
+    name_lbl = tk.Label(nf, text=cfg["userName"], font=("Segoe UI", 15, "bold"),
+                        bg=WHITE, fg=TEXT, cursor="fleur")
+    name_lbl.pack(anchor="w")
+    name_lbl.bind("<ButtonPress-1>", _drag_start)
+    name_lbl.bind("<B1-Motion>",     _drag_move)
+    badge_f = tk.Frame(nf, bg=acc_color, padx=8, pady=2)
+    badge_f.pack(anchor="w", pady=(4, 0))
+    tk.Label(badge_f, text=f"● {status_lbl_text}",
+             font=("Segoe UI", 8, "bold"), bg=acc_color, fg="white").pack()
 
-    date_var = tk.StringVar()
-    tk.Label(nav, textvariable=date_var,
-             font=("Segoe UI", 9), bg=BG, fg=MUTED).pack(side="right", padx=(10, 0))
+    tk.Frame(hdr, bg=WHITE).pack(side="left", fill="x", expand=True)  # flex spacer
 
-    def _nav_btn(parent, text, cmd):
-        b = tk.Button(parent, text=text, command=cmd,
-                      font=("Segoe UI", 9), bg=BG2, fg=TEXT,
-                      activebackground=BORDER, activeforeground=TEXT,
-                      relief="flat", padx=9, pady=3, cursor="hand2", bd=0)
-        b.pack(side="left", padx=2)
-        return b
+    # Stats chips
+    work_val = tk.StringVar(value="0m")
+    idle_val = tk.StringVar(value="0m")
 
-    _nav_btn(nav, "← Prev",  lambda: _change_date(-1))
-    today_btn = _nav_btn(nav, "Today", lambda: None)  # command set below
-    _nav_btn(nav, "Next →",  lambda: _change_date(+1))
+    def _chip(parent, var, sublabel, bg, fg, bc):
+        outer = tk.Frame(parent, bg=bc, padx=1, pady=1)
+        outer.pack(side="left", padx=(0, 7))
+        inner = tk.Frame(outer, bg=bg, padx=14, pady=7)
+        inner.pack()
+        tk.Label(inner, textvariable=var, font=("Segoe UI", 14, "bold"),
+                 bg=bg, fg=fg).pack()
+        tk.Label(inner, text=sublabel, font=("Segoe UI", 7, "bold"),
+                 bg=bg, fg=fg).pack()
 
-    tk.Frame(root, bg=BORDER, height=1).pack(fill="x")
+    _chip(hdr, work_val, "WORKING", BLUE_L, BLUE, BLUE_B)
+    _chip(hdr, idle_val, "IDLE",    RED_L,  RED,  RED_B)
 
-    # ── Status bar ────────────────────────────────────────
-    status_var = tk.StringVar(value="Loading…")
-    tk.Label(root, textvariable=status_var,
-             font=("Segoe UI", 9), bg=BG, fg=MUTED,
-             anchor="w", padx=18, pady=5).pack(fill="x")
+    # Close + Minimize buttons
+    def _close():
+        _timeline_root[0] = None
+        root.destroy()
 
-    # ── Timeline canvas ───────────────────────────────────
-    cvs_frame = tk.Frame(root, bg=BG, padx=18, pady=0)
-    cvs_frame.pack(fill="x")
+    def _minimize():
+        root.withdraw()   # hide; tray double-click restores via deiconify()
 
-    cvs = tk.Canvas(cvs_frame, height=70, bg=BG, highlightthickness=0)
+    root.protocol("WM_DELETE_WINDOW", _close)
+
+    for txt, cmd, hov_bg, hov_fg in [("—", _minimize, BORDER2, TEXT2), ("✕", _close, RED_L, RED)]:
+        b = tk.Button(hdr, text=txt, command=cmd,
+                      font=("Segoe UI", 11), bg=WHITE, fg=MUTED,
+                      activebackground=hov_bg, activeforeground=hov_fg,
+                      relief="flat", bd=0, cursor="hand2",
+                      width=2, highlightthickness=0)
+        b.pack(side="left", padx=(0, 2))
+
+    # ── Divider ────────────────────────────────────────────
+    tk.Frame(C, bg=BORDER2, height=1).pack(fill="x")
+
+    # ── Timeline section ──────────────────────────────────
+    tl_sec = tk.Frame(C, bg=BG_TL, padx=18, pady=10)
+    tl_sec.pack(fill="x")
+
+    tl_top = tk.Frame(tl_sec, bg=BG_TL)
+    tl_top.pack(fill="x", pady=(0, 7))
+    tk.Label(tl_top, text="▷  DAY TIMELINE",
+             font=("Segoe UI", 8, "bold"), bg=BG_TL, fg=MUTED2).pack(side="left")
+    leg = tk.Frame(tl_top, bg=BG_TL)
+    leg.pack(side="right")
+    for sym, lbl, col in [("■", "Working", BLUE), ("■", "Idle", RED), ("—", "Now", ORANGE)]:
+        tk.Label(leg, text=sym, font=("Segoe UI", 9), bg=BG_TL, fg=col).pack(side="left", padx=(8, 1))
+        tk.Label(leg, text=lbl, font=("Segoe UI", 8), bg=BG_TL, fg=MUTED).pack(side="left")
+
+    # Canvas: 44px bar + 24px for ticks + labels
+    cvs = tk.Canvas(tl_sec, height=68, bg=BG_TL, highlightthickness=0)
     cvs.pack(fill="x")
 
-    # ── Summary row ───────────────────────────────────────
-    sum_frame = tk.Frame(root, bg=BG, padx=18, pady=6)
-    sum_frame.pack(fill="x")
-
-    work_chip = tk.Label(sum_frame, font=("Segoe UI", 10, "bold"),
-                         bg=BLUE_BG, fg="#93c5fd", padx=10, pady=3, relief="flat")
-    idle_chip = tk.Label(sum_frame, font=("Segoe UI", 10, "bold"),
-                         bg="#450a0a", fg="#fca5a5", padx=10, pady=3, relief="flat")
-
-    tk.Frame(root, bg=BORDER, height=1).pack(fill="x", padx=18)
+    # ── Divider ────────────────────────────────────────────
+    tk.Frame(C, bg=BORDER2, height=1).pack(fill="x")
 
     # ── Segments table ────────────────────────────────────
-    tbl_frame = tk.Frame(root, bg=BG, padx=18, pady=10)
-    tbl_frame.pack(fill="both", expand=True)
+    tbl_f = tk.Frame(C, bg=BG_WIN)
+    tbl_f.pack(fill="both", expand=True)
 
-    cols   = ("#", "Status", "Start (JST)", "End (JST)", "Duration", "Ticks")
-    widths = [36, 90, 90, 90, 90, 60]
+    cols   = ("#", "Status", "Start", "End", "Duration")
+    widths = [44, 110, 80, 80, 90]
 
-    style = ttk.Style()
-    style.theme_use("default")
-    style.configure("T.Treeview",
-                    background=BG2, foreground=TEXT,
-                    fieldbackground=BG2, rowheight=28,
-                    font=("Segoe UI", 9), borderwidth=0)
-    style.configure("T.Treeview.Heading",
-                    background=BORDER, foreground=MUTED,
-                    font=("Segoe UI", 9, "bold"), relief="flat")
-    style.map("T.Treeview", background=[("selected", BLUE)])
-    style.configure("T.Vertical.TScrollbar",
-                    background=BG2, troughcolor=BG, borderwidth=0)
+    sty = ttk.Style()
+    sty.theme_use("default")
+    sty.configure("L.Treeview",
+                  background=WHITE, foreground=TEXT2,
+                  fieldbackground=WHITE, rowheight=34,
+                  font=("Segoe UI", 10), borderwidth=0, relief="flat")
+    sty.configure("L.Treeview.Heading",
+                  background=BG_TL, foreground=MUTED,
+                  font=("Segoe UI", 9, "bold"), relief="flat", borderwidth=0)
+    sty.map("L.Treeview",
+            background=[("selected", BLUE_L)],
+            foreground=[("selected", BLUE)])
+    # Slim modern scrollbar
+    sty.configure("Slim.Vertical.TScrollbar",
+                  background="#b4ccf5", troughcolor=BG_WIN,
+                  borderwidth=0, relief="flat",
+                  arrowcolor=BG_WIN, arrowsize=0, width=6)
+    sty.map("Slim.Vertical.TScrollbar",
+            background=[("active", BLUE), ("!active", "#b4ccf5")])
 
-    tree = ttk.Treeview(tbl_frame, columns=cols, show="headings",
-                        height=12, style="T.Treeview")
+    tree = ttk.Treeview(tbl_f, columns=cols, show="headings",
+                        height=14, style="L.Treeview", selectmode="browse")
     for col, cw in zip(cols, widths):
-        anchor = "center" if col in ("#", "Ticks") else "w"
         tree.heading(col, text=col)
-        tree.column(col, width=cw, minwidth=cw, anchor=anchor)
+        tree.column(col, width=cw, minwidth=cw,
+                    anchor="center" if col == "#" else "w")
 
-    vsb = ttk.Scrollbar(tbl_frame, orient="vertical",
-                        command=tree.yview, style="T.Vertical.TScrollbar")
+    vsb = ttk.Scrollbar(tbl_f, orient="vertical",
+                        command=tree.yview, style="Slim.Vertical.TScrollbar")
     tree.configure(yscrollcommand=vsb.set)
-    tree.pack(side="left", fill="both", expand=True)
-    vsb.pack(side="right", fill="y")
+    tree.pack(side="left", fill="both", expand=True, padx=(18, 0))
+    vsb.pack(side="right", fill="y", padx=(0, 6), pady=4)
 
-    # ── Bottom bar ────────────────────────────────────────
-    bot = tk.Frame(root, bg=BG, pady=8)
-    bot.pack(fill="x")
-    _nav_btn(bot, "⟳  Refresh", lambda: _load())
+    # ── Divider ────────────────────────────────────────────
+    tk.Frame(C, bg=BORDER, height=1).pack(fill="x")
+
+    # ── Footer ────────────────────────────────────────────
+    foot = tk.Frame(C, bg=BG_TL, padx=14, pady=10)
+    foot.pack(fill="x")
+
+    def _nav_btn(txt, cmd):
+        b = tk.Button(foot, text=txt, command=cmd,
+                      font=("Segoe UI", 14), bg=WHITE, fg=TEXT2,
+                      activebackground=BLUE_L, activeforeground=BLUE,
+                      relief="flat", bd=0, cursor="hand2", width=2,
+                      highlightbackground=BORDER2, highlightthickness=1)
+        b.pack(side="left", padx=(0, 4))
+        return b
+
+    prev_btn = _nav_btn("‹", lambda: _change_date(-1))
+
+    date_lbl = tk.Label(foot, text="", font=("Segoe UI", 10, "bold"),
+                        bg=WHITE, fg=TEXT, padx=10, pady=5,
+                        highlightbackground=BORDER2, highlightthickness=1)
+    date_lbl.pack(side="left", padx=(0, 4))
+
+    next_btn = _nav_btn("›", lambda: _change_date(+1))
+
+    today_btn = tk.Button(foot, text="Today", command=lambda: None,
+                          font=("Segoe UI", 9, "bold"), bg=BLUE_L, fg=BLUE,
+                          activebackground=BLUE_B, activeforeground=BLUE,
+                          relief="flat", bd=0, cursor="hand2", padx=10, pady=5,
+                          highlightbackground=BLUE_B, highlightthickness=1)
 
     # ── Helpers ───────────────────────────────────────────
-    def _fmt_time(iso: str) -> str:
+    def _fmt_time(iso):
         try:
-            return (datetime.fromisoformat(iso.replace("Z", "+00:00"))
-                    .astimezone(JST).strftime("%H:%M"))
+            return datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(JST).strftime("%H:%M")
         except Exception:
             return "—"
 
-    def _fmt_dur(seconds: float) -> str:
+    def _fmt_dur(seconds):
         t = max(0, int(seconds // 60))
         h, m = divmod(t, 60)
         if h and m: return f"{h}h {m}m"
         return f"{h}h" if h else (f"{m}m" if m else "0m")
 
-    def _draw(segs):
-        cvs.delete("all")
-        W = cvs.winfo_width() or 720
-        H_BAR = 44
+    def _fill_gaps(segs):
+        if len(segs) <= 1:
+            return segs
+        result = []
+        for i, seg in enumerate(segs):
+            result.append(seg)
+            if i < len(segs) - 1 and seg.get("end"):
+                try:
+                    gap_s = (
+                        datetime.fromisoformat(segs[i+1]["start"].replace("Z", "+00:00")) -
+                        datetime.fromisoformat(seg["end"].replace("Z", "+00:00"))
+                    ).total_seconds()
+                    if gap_s >= TICK_S * 1.5:
+                        result.append({"status": "idle", "start": seg["end"],
+                                       "end": segs[i+1]["start"], "isGap": True})
+                except Exception:
+                    pass
+        return result
 
-        cvs.create_rectangle(0, 0, W, H_BAR, fill=BG2, outline=BORDER, width=1)
+    def _draw(segs):
+        cvs.update_idletasks()
+        cvs.delete("all")
+        W   = max(cvs.winfo_width(), 1)
+        BAR = 44   # bar occupies y=0..BAR
+        PAD = 5    # vertical padding for activity segments inside the bar
+
+        # Bar track — white with a soft border
+        cvs.create_rectangle(0, 0, W, BAR, fill=WHITE, outline=BORDER2, width=1)
+
+        if not segs:
+            cvs.create_text(W // 2, BAR // 2, text="No data for this day",
+                            font=("Segoe UI", 9), fill=MUTED)
 
         for seg in segs:
             try:
                 s_dt  = datetime.fromisoformat(seg["start"].replace("Z", "+00:00")).astimezone(JST)
                 e_iso = seg.get("end")
-                if e_iso:
-                    e_dt = datetime.fromisoformat(e_iso.replace("Z", "+00:00")).astimezone(JST)
-                else:
-                    e_dt = datetime.now(JST)
+                e_dt  = datetime.fromisoformat(e_iso.replace("Z", "+00:00")).astimezone(JST) \
+                        if e_iso else datetime.now(JST)
                 s_min = s_dt.hour * 60 + s_dt.minute + s_dt.second / 60
                 e_min = e_dt.hour * 60 + e_dt.minute + e_dt.second / 60
-                color = BLUE if seg["status"] == "working" else RED
-                cvs.create_rectangle(
-                    max(1, s_min / 1440 * W), 2,
-                    min(W - 1, max(s_min / 1440 * W + 2, e_min / 1440 * W)), H_BAR - 2,
-                    fill=color, outline="", width=0)
+                col   = BLUE if seg["status"] == "working" else RED
+                x1 = max(1, s_min / 1440 * W)
+                x2 = min(W - 1, max(x1 + 4, e_min / 1440 * W))
+                cvs.create_rectangle(x1, PAD, x2, BAR - PAD, fill=col, outline="")
             except Exception:
                 pass
 
-        now_jst = datetime.now(JST)
-        for h in range(0, 25, 2):
+        # Tick marks — major at 0/6/12/18/24, minor elsewhere
+        for h in range(25):
             x     = h / 24 * W
-            major = h % 4 == 0
-            cvs.create_line(x, H_BAR - (8 if major else 4), x, H_BAR,
-                            fill=MUTED if major else BORDER, width=1)
+            major = h % 6 == 0
+            tick_h = 8 if major else 4
+            cvs.create_line(x, BAR, x, BAR + tick_h,
+                            fill=MUTED if major else MUTED2, width=1)
             if major:
-                cvs.create_text(x, H_BAR + 10, text=f"{h:02d}",
-                                font=("Segoe UI", 8), fill=MUTED, anchor="n")
+                cvs.create_text(x, BAR + tick_h + 3, text=f"{h:02d}",
+                                font=("Segoe UI", 8, "bold"), fill=MUTED, anchor="n")
 
+        # "Now" marker — vertical line + dot centered inside bar
         if state["date"] == datetime.now(JST).date():
-            now_min = now_jst.hour * 60 + now_jst.minute + now_jst.second / 60
-            nx = now_min / 1440 * W
-            cvs.create_line(nx, 0, nx, H_BAR, fill="#f97316", width=2)
+            now_jst = datetime.now(JST)
+            nx  = (now_jst.hour * 60 + now_jst.minute + now_jst.second / 60) / 1440 * W
+            mid = BAR // 2
+            cvs.create_line(nx, 1, nx, BAR - 1, fill=ORANGE, width=2)
+            cvs.create_oval(nx - 5, mid - 5, nx + 5, mid + 5,
+                            fill=ORANGE, outline=WHITE, width=2)
 
     def _load():
-        d  = state["date"]
-        ds = d.strftime("%Y-%m-%d")
-        today_jst = datetime.now(JST).date()
-        today_btn.config(state="disabled" if d == today_jst else "normal")
-        date_var.set(f"{ds} (JST)")
-        status_var.set("Loading…")
-        work_chip.pack_forget()
-        idle_chip.pack_forget()
+        d        = state["date"]
+        ds       = d.strftime("%Y-%m-%d")
+        is_today = d == datetime.now(JST).date()
+
+        date_lbl.config(text=ds)
+        next_btn.config(state="disabled" if is_today else "normal",
+                        fg=MUTED2 if is_today else TEXT2)
+        if is_today:
+            today_btn.pack_forget()
+        else:
+            today_btn.pack(side="left", padx=(0, 4))
+
         for row in tree.get_children():
             tree.delete(row)
         cvs.delete("all")
+        work_val.set("…")
+        idle_val.set("…")
 
         def _fetch():
             try:
                 ticks = _fetch_my_ticks(cfg, ds)
-                segs  = _group_ticks(ticks, ds)
-                root.after(0, lambda: _render(ticks, segs))
-            except Exception as exc:
-                root.after(0, lambda: status_var.set(f"Error: {exc}"))
+                raw   = _group_ticks(ticks, ds)
+                root.after(0, lambda: _render(ticks, raw))
+            except Exception:
+                root.after(0, lambda: _render([], []))
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    def _render(ticks, segs):
+    def _render(ticks, raw_segs):
+        segs   = _fill_gaps(raw_segs)
         work_s = idle_s = 0
+
         for i, seg in enumerate(segs):
             try:
-                s = datetime.fromisoformat(seg["start"].replace("Z", "+00:00"))
+                s     = datetime.fromisoformat(seg["start"].replace("Z", "+00:00"))
                 e_iso = seg.get("end")
                 if e_iso:
-                    e = datetime.fromisoformat(e_iso.replace("Z", "+00:00"))
+                    e     = datetime.fromisoformat(e_iso.replace("Z", "+00:00"))
                     dur_s = max(0, (e - s).total_seconds())
                 else:
                     dur_s = max(0, (datetime.now(timezone.utc) - s).total_seconds())
+
                 if seg["status"] == "working":
                     work_s += dur_s
                 else:
                     idle_s += dur_s
-                end_str = _fmt_time(e_iso) if e_iso else "now ●"
-                tag = "w" if seg["status"] == "working" else "i"
+
+                end_str = _fmt_time(e_iso) if e_iso else "ongoing"
+                lbl     = "Inactive" if seg.get("isGap") else \
+                          ("Working" if seg["status"] == "working" else "Idle")
+                tag     = "w" if seg["status"] == "working" else "i"
                 tree.insert("", "end",
-                            values=(i + 1,
-                                    "Working" if seg["status"] == "working" else "Idle",
-                                    _fmt_time(seg["start"]), end_str,
-                                    _fmt_dur(dur_s), seg["count"]),
+                            values=(i + 1, lbl, _fmt_time(seg["start"]), end_str, _fmt_dur(dur_s)),
                             tags=(tag,))
             except Exception:
                 pass
 
-        tree.tag_configure("w", foreground="#93c5fd")
-        tree.tag_configure("i", foreground="#fca5a5")
+        tree.tag_configure("w", foreground=BLUE, background=WHITE)
+        tree.tag_configure("i", foreground=RED,  background=BG_IDLE)
 
-        status_var.set(
-            f"{len(ticks)} ticks  •  {len(segs)} segment{'s' if len(segs) != 1 else ''}")
-        if work_s > 0:
-            work_chip.config(text=f"  Working: {_fmt_dur(work_s)}  ")
-            work_chip.pack(side="left", padx=(0, 8))
-        if idle_s > 0:
-            idle_chip.config(text=f"  Idle: {_fmt_dur(idle_s)}  ")
-            idle_chip.pack(side="left")
-        if not ticks:
-            status_var.set("No data for this day.")
-
+        work_val.set(_fmt_dur(work_s) if work_s else "0m")
+        idle_val.set(_fmt_dur(idle_s) if idle_s else "0m")
+        state["segs"] = segs
         root.after(50, lambda: _draw(segs))
 
-    def _change_date(delta: int):
+    def _change_date(delta):
         state["date"] = state["date"] + timedelta(days=delta)
         _load()
 
@@ -676,18 +832,59 @@ def _timeline_main(cfg: dict):
         _load()
 
     today_btn.config(command=_go_today)
+
+    def _auto_refresh():
+        if state["date"] == datetime.now(JST).date():
+            _load()
+        root.after(60_000, _auto_refresh)
+    root.after(60_000, _auto_refresh)
+
+    cvs.bind("<Configure>", lambda e: _draw(state.get("segs", [])))
+
     root.after(120, _load)
     root.mainloop()
 
 
 # ── System-tray helpers ──────────────────────────────────────────────
 def _make_icon(status: str) -> "Image.Image":
-    size  = 64
-    img   = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw  = ImageDraw.Draw(img)
-    # working = blue (#2563eb), idle = red (#ef4444)
-    color = (37, 99, 235) if status == "working" else (239, 68, 68)
-    draw.ellipse([6, 6, size - 6, size - 6], fill=color)
+    S    = 64
+    img  = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    if status == "working":
+        bg = (37, 99, 235)      # blue
+    elif status == "idle":
+        bg = (239, 68, 68)      # red
+    else:
+        bg = (100, 116, 139)    # slate-500
+
+    # ── Rounded-square background (Pillow-compatible) ──
+    def _rrect(x0, y0, x1, y1, r, fill):
+        draw.rectangle([x0+r, y0, x1-r, y1], fill=fill)
+        draw.rectangle([x0, y0+r, x1, y1-r], fill=fill)
+        draw.ellipse([x0, y0, x0+2*r, y0+2*r], fill=fill)
+        draw.ellipse([x1-2*r, y0, x1, y0+2*r], fill=fill)
+        draw.ellipse([x0, y1-2*r, x0+2*r, y1], fill=fill)
+        draw.ellipse([x1-2*r, y1-2*r, x1, y1], fill=fill)
+
+    _rrect(4, 4, S-4, S-4, r=12, fill=bg)
+
+    W = (255, 255, 255, 220)   # white with slight transparency
+
+    if status == "working":
+        # Three ascending bars (activity indicator)
+        for x0, y0, x1 in [(13, 42, 22), (27, 30, 36), (41, 20, 50)]:
+            _rrect(x0, y0, x1, 52, r=3, fill=W)
+
+    elif status == "idle":
+        # Pause symbol — two vertical rectangles
+        _rrect(16, 17, 27, 47, r=3, fill=W)
+        _rrect(37, 17, 48, 47, r=3, fill=W)
+
+    else:
+        # Offline — horizontal dash
+        _rrect(14, 27, 50, 37, r=4, fill=W)
+
     return img
 
 
@@ -703,9 +900,8 @@ def _confirm_dialog(title: str, message: str) -> bool:
 
 def _start_tray(cfg: dict):
     def _quit(icon, _item):
-        unregister_startup()
         icon.stop()
-        os._exit(0)
+        os._exit(1)  # non-zero → Task Scheduler treats as failure → restarts in ~1 min
 
     def _open_timeline(icon, _item):
         _show_timeline(cfg)
@@ -724,44 +920,71 @@ def _start_tray(cfg: dict):
     icon.run()
 
 
-# ── Windows auto-startup ─────────────────────────────────────────────
-_RUN_KEY  = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_APP_NAME = "BlueOrbitTracker"
+# ── Windows auto-startup (Task Scheduler with auto-restart) ──────────
+_RUN_KEY   = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_APP_NAME  = "BlueOrbitTracker"
+_TASK_NAME = "BlueOrbitTracker"
 
 
 def register_startup():
+    """Register a Task Scheduler task that auto-restarts the tracker if killed."""
     if not getattr(sys, "frozen", False) or sys.platform != "win32":
         return
-    import winreg
-    exe_path = sys.executable
+    exe = sys.executable.replace("'", "''")  # escape single quotes for PowerShell
+    ps_cmd = (
+        f"$a = New-ScheduledTaskAction -Execute '{exe}' -Argument '--watchdog'; "
+        "$t = New-ScheduledTaskTrigger -AtLogOn; "
+        "$s = New-ScheduledTaskSettingsSet "
+        "  -ExecutionTimeLimit (New-TimeSpan -Hours 0) "
+        "  -RestartCount 999 "
+        "  -RestartInterval (New-TimeSpan -Minutes 1) "
+        "  -StartWhenAvailable "
+        "  -MultipleInstances IgnoreNew; "
+        f"Register-ScheduledTask -TaskName '{_TASK_NAME}' "
+        "  -Action $a -Trigger $t -Settings $s -Force | Out-Null"
+    )
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY,
-                            0, winreg.KEY_READ) as key:
-            try:
-                current, _ = winreg.QueryValueEx(key, _APP_NAME)
-                if current == exe_path:
-                    return
-            except FileNotFoundError:
-                pass
+        subprocess.run(
+            ["powershell", "-ExecutionPolicy", "Bypass",
+             "-WindowStyle", "Hidden", "-Command", ps_cmd],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            timeout=30,
+        )
+        _log("Registered Task Scheduler task (auto-restart on kill).")
+    except Exception as e:
+        _log(f"Could not register scheduled task: {e}")
+    # Remove legacy registry Run key if present
+    try:
+        import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY,
                             0, winreg.KEY_SET_VALUE) as key:
-            winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, exe_path)
-        _log("Registered for Windows startup.")
-    except Exception as e:
-        _log(f"Could not register for startup: {e}")
+            try: winreg.DeleteValue(key, _APP_NAME)
+            except FileNotFoundError: pass
+    except Exception:
+        pass
 
 
 def unregister_startup():
     if sys.platform != "win32":
         return
     try:
+        subprocess.run(
+            ["powershell", "-ExecutionPolicy", "Bypass",
+             "-WindowStyle", "Hidden", "-Command",
+             f"Unregister-ScheduledTask -TaskName '{_TASK_NAME}'"
+             " -Confirm:$false -ErrorAction SilentlyContinue"],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            timeout=30,
+        )
+    except Exception:
+        pass
+    # Also remove legacy registry Run key
+    try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY,
                             0, winreg.KEY_SET_VALUE) as key:
-            try:
-                winreg.DeleteValue(key, _APP_NAME)
-            except FileNotFoundError:
-                pass
+            try: winreg.DeleteValue(key, _APP_NAME)
+            except FileNotFoundError: pass
     except Exception:
         pass
 
@@ -789,6 +1012,20 @@ def _log(msg: str):
 
 # ── Entry point ──────────────────────────────────────────────────────
 def main():
+    # ── Prevent multiple instances ────────────────────────
+    # --watchdog is passed by the Task Scheduler task; exit silently so
+    # Task Scheduler sees success (code 0) and does NOT trigger a restart.
+    watchdog_mode = "--watchdog" in sys.argv
+    if not _acquire_single_instance():
+        if not watchdog_mode:
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                "BlueOrbit Tracker is already running.\n\nCheck the system tray.",
+                "BlueOrbit Tracker",
+                0x40,   # MB_ICONINFORMATION
+            )
+        sys.exit(0)
+
     _init_log()
     cfg = load_config()
     register_startup()

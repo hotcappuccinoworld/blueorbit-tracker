@@ -100,7 +100,7 @@ def _version_gt(a: str, b: str) -> bool:
 
 
 def _check_update(cfg: dict):
-    """Hit /tracker/version and prompt the user if a newer build is available."""
+    """Hit /tracker/version and silently auto-update if a newer build is available."""
     try:
         r = requests.get(
             cfg["serverUrl"].rstrip("/") + "/tracker/version",
@@ -114,65 +114,29 @@ def _check_update(cfg: dict):
         cur_ver    = _bundled_defaults().get("version", "0.0.0")
         _log(f"Version check: current={cur_ver}  latest={server_ver or '—'}")
         if server_ver and dl_url and _version_gt(server_ver, cur_ver):
-            _log(f"Update available: {cur_ver} → {server_ver}")
-            _prompt_and_update(server_ver, cur_ver, dl_url)
+            _log(f"Update available: {cur_ver} → {server_ver}. Downloading silently…")
+            _do_update(dl_url, server_ver)
     except Exception as e:
         _log(f"Update check skipped: {e}")
 
 
-def _prompt_and_update(new_ver: str, cur_ver: str, url: str):
-    import tkinter as tk
-    from tkinter import messagebox
-    root = tk.Tk()
-    root.withdraw()
-    ok = messagebox.askyesno(
-        "BlueOrbit Tracker — Update Available",
-        f"Version {new_ver} is available  (you have {cur_ver}).\n\n"
-        "Download and install now?\nThe app will restart automatically.",
-        icon="info",
-    )
-    root.destroy()
-    if ok:
-        _do_update(url, new_ver)
-
-
 def _do_update(url: str, new_ver: str):
-    """Download the new exe then use PowerShell to swap files after we exit."""
+    """Silently download the new exe, swap files via PowerShell, then restart."""
     if not getattr(sys, "frozen", False):
-        _log("Not running as a frozen exe — skipping self-update.")
+        _log("Not frozen — skipping self-update.")
         return
-
-    import tkinter as tk
-    from tkinter import messagebox
 
     current_exe = sys.executable
     new_exe     = current_exe + ".update"
 
-    # Show a simple "downloading…" window while the download runs.
-    dlg = tk.Tk()
-    dlg.title("BlueOrbit Tracker — Updating")
-    dlg.resizable(False, False)
-    w, h = 380, 72
-    sw, sh = dlg.winfo_screenwidth(), dlg.winfo_screenheight()
-    dlg.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
-    dlg.attributes("-topmost", True)
-    tk.Label(dlg, text=f"Downloading version {new_ver}, please wait…",
-             font=("Segoe UI", 10), padx=20).pack(expand=True)
-    dlg.update()
-
     try:
-        r = requests.get(url, stream=True, timeout=180)
+        r = requests.get(url, stream=True, timeout=300)
         r.raise_for_status()
         with open(new_exe, "wb") as f:
             for chunk in r.iter_content(chunk_size=131072):
                 f.write(chunk)
-                dlg.update()          # keep window responsive
+        _log(f"Downloaded v{new_ver} → {new_exe}")
 
-        dlg.destroy()
-        _log(f"Download complete → {new_exe}")
-
-        # PowerShell swaps the file after we've fully exited (4-second grace).
-        # Single-quoted paths are literal in PowerShell (handles spaces correctly).
         ps_cmd = (
             f"Start-Sleep -Seconds 4; "
             f"Move-Item -Force '{new_exe}' '{current_exe}'; "
@@ -183,19 +147,16 @@ def _do_update(url: str, new_ver: str):
              "-WindowStyle", "Hidden", "-Command", ps_cmd],
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
         )
-        _log("Restart scheduled. Exiting…")
+        _log(f"Updated to v{new_ver}. Restarting…")
         os._exit(0)
 
     except Exception as e:
-        try: dlg.destroy()
-        except Exception: pass
         try:
-            if os.path.exists(new_exe): os.remove(new_exe)
-        except Exception: pass
-        _log(f"Update failed: {e}")
-        root = tk.Tk(); root.withdraw()
-        messagebox.showerror("Update Failed", f"Could not download update:\n{e}")
-        root.destroy()
+            if os.path.exists(new_exe):
+                os.remove(new_exe)
+        except Exception:
+            pass
+        _log(f"Silent update failed: {e}")
 
 
 def _update_checker(cfg: dict):

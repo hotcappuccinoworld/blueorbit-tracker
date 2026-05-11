@@ -194,11 +194,11 @@ def _do_update(url: str, new_ver: str):
 
 
 def _update_checker(cfg: dict):
-    """Background thread: check for update 30 s after start, then every 6 h."""
-    time.sleep(30)
+    """Background thread: check for update 10 s after start, then every 60 s."""
+    time.sleep(10)
     while True:
         _check_update(cfg)
-        time.sleep(6 * 60 * 60)
+        time.sleep(60)
 
 
 # ── Config ───────────────────────────────────────────────────────────

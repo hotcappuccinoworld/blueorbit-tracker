@@ -25,23 +25,21 @@ import subprocess
 
 import requests
 
-try:
-    import pystray
-    from PIL import Image, ImageDraw
-    TRAY_OK = True
-except ImportError:
-    TRAY_OK = False
-
 # ── Constants ────────────────────────────────────────────────────────
 TICK_INTERVAL  = 60     # seconds between heartbeats
 IDLE_THRESHOLD = 300    # seconds of no input before "idle" (5 min)
 JST            = timezone(timedelta(hours=9))  # Japan Standard Time
 _PROCESS_QUERY_LIMITED = 0x1000
 
+# ── Hotkey: Ctrl+Shift+9 ─────────────────────────────────────────────
+_WM_HOTKEY  = 0x0312
+_MOD_CTRL   = 0x0002
+_MOD_SHIFT  = 0x0004
+_VK_9       = 0x39
+
 # ── Shared state ─────────────────────────────────────────────────────
 _status         = "working"
 _active_app     = ""
-_tray           = [None]
 _mutex_handle   = None   # keeps the singleton mutex alive for the process lifetime
 _timeline_root  = [None] # reference to the open timeline window (if any)
 
@@ -186,10 +184,6 @@ def _do_update(url: str, new_ver: str):
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
         )
         _log("Restart scheduled. Exiting…")
-        icon = _tray[0]
-        if icon:
-            try: icon.stop()
-            except Exception: pass
         os._exit(0)
 
     except Exception as e:
@@ -385,14 +379,6 @@ def tick_loop(cfg: dict):
              f"(idle {int(idle_secs)}s)  app={app or '—'}")
         send_tick(cfg, status, app)
 
-        icon = _tray[0]
-        if icon and TRAY_OK:
-            try:
-                icon.icon  = _make_icon(status)
-                icon.title = f"BlueOrbit — {status.capitalize()}"
-            except Exception:
-                pass
-
 
 # ── Personal timeline window ─────────────────────────────────────────
 def _fetch_my_ticks(cfg: dict, date_str: str) -> list:
@@ -451,6 +437,41 @@ def _show_timeline(cfg: dict):
         except Exception:
             _timeline_root[0] = None
     threading.Thread(target=_timeline_main, args=(cfg,), daemon=True).start()
+
+
+def _toggle_timeline(cfg: dict):
+    """Show timeline if hidden/closed; hide it if visible."""
+    existing = _timeline_root[0]
+    if existing is not None:
+        try:
+            def _do_toggle():
+                if existing.winfo_viewable():
+                    existing.withdraw()
+                else:
+                    existing.deiconify()
+                    existing.lift()
+                    existing.focus_force()
+            existing.after(0, _do_toggle)
+            return
+        except Exception:
+            _timeline_root[0] = None
+    threading.Thread(target=_timeline_main, args=(cfg,), daemon=True).start()
+
+
+def _hotkey_listener(cfg: dict):
+    """Background thread: Ctrl+Shift+9 toggles the timeline window."""
+    if not ctypes.windll.user32.RegisterHotKey(None, 1, _MOD_CTRL | _MOD_SHIFT, _VK_9):
+        _log("Could not register Ctrl+Shift+9 (already in use?)")
+        return
+    _log("Hotkey ready: Ctrl+Shift+9 toggles timeline")
+    msg = ctypes.wintypes.MSG()
+    while True:
+        ret = ctypes.windll.user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+        if ret == 0 or ret == -1:
+            break
+        if msg.message == _WM_HOTKEY and msg.wParam == 1:
+            _toggle_timeline(cfg)
+    ctypes.windll.user32.UnregisterHotKey(None, 1)
 
 
 def _timeline_main(cfg: dict):
@@ -849,49 +870,6 @@ def _timeline_main(cfg: dict):
     root.mainloop()
 
 
-# ── System-tray helpers ──────────────────────────────────────────────
-def _make_icon(status: str) -> "Image.Image":
-    S    = 64
-    img  = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    if status == "working":
-        bg = (37, 99, 235)      # blue
-    elif status == "idle":
-        bg = (239, 68, 68)      # red
-    else:
-        bg = (100, 116, 139)    # slate-500
-
-    # ── Rounded-square background (Pillow-compatible) ──
-    def _rrect(x0, y0, x1, y1, r, fill):
-        draw.rectangle([x0+r, y0, x1-r, y1], fill=fill)
-        draw.rectangle([x0, y0+r, x1, y1-r], fill=fill)
-        draw.ellipse([x0, y0, x0+2*r, y0+2*r], fill=fill)
-        draw.ellipse([x1-2*r, y0, x1, y0+2*r], fill=fill)
-        draw.ellipse([x0, y1-2*r, x0+2*r, y1], fill=fill)
-        draw.ellipse([x1-2*r, y1-2*r, x1, y1], fill=fill)
-
-    _rrect(4, 4, S-4, S-4, r=12, fill=bg)
-
-    W = (255, 255, 255, 220)   # white with slight transparency
-
-    if status == "working":
-        # Three ascending bars (activity indicator)
-        for x0, y0, x1 in [(13, 42, 22), (27, 30, 36), (41, 20, 50)]:
-            _rrect(x0, y0, x1, 52, r=3, fill=W)
-
-    elif status == "idle":
-        # Pause symbol — two vertical rectangles
-        _rrect(16, 17, 27, 47, r=3, fill=W)
-        _rrect(37, 17, 48, 47, r=3, fill=W)
-
-    else:
-        # Offline — horizontal dash
-        _rrect(14, 27, 50, 37, r=4, fill=W)
-
-    return img
-
-
 def _confirm_dialog(title: str, message: str) -> bool:
     import tkinter as tk
     from tkinter import messagebox
@@ -900,28 +878,6 @@ def _confirm_dialog(title: str, message: str) -> bool:
     answer = messagebox.askyesno(title, message)
     root.destroy()
     return answer
-
-
-def _start_tray(cfg: dict):
-    def _quit(icon, _item):
-        icon.stop()
-        os._exit(0)  # repeat trigger restarts within ~1 min regardless of exit code
-
-    def _open_timeline(icon, _item):
-        _show_timeline(cfg)
-
-    # default=True makes this the double-click action on Windows
-    icon = pystray.Icon(
-        name  = "BlueOrbit Tracker",
-        icon  = _make_icon(_status),
-        title = "BlueOrbit Tracker",
-        menu  = pystray.Menu(
-            pystray.MenuItem("My Timeline", _open_timeline, default=True),
-            pystray.MenuItem("Quit",        _quit),
-        ),
-    )
-    _tray[0] = icon
-    icon.run()
 
 
 # ── Windows auto-startup (Task Scheduler with auto-restart) ──────────
@@ -1054,17 +1010,13 @@ def main():
     threading.Thread(target=_update_checker, args=(cfg,), daemon=True).start()
     _log("Update checker started (first check in 30 s).")
 
-    if TRAY_OK:
-        _log("Tray active. Double-click icon to open timeline.")
-        _start_tray(cfg)
-    else:
-        _log("Tray not available (install pystray + Pillow).")
-        _log("Press Ctrl+C to stop.")
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            _log("Stopped.")
+    threading.Thread(target=_hotkey_listener, args=(cfg,), daemon=True).start()
+
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        _log("Stopped.")
 
 
 if __name__ == "__main__":

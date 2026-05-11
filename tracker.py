@@ -511,7 +511,7 @@ def _timeline_main(cfg: dict):
     # ── Borderless window ─────────────────────────────────
     root = tk.Tk()
     root.overrideredirect(True)
-    root.configure(bg=BORDER)            # visible as 1-px border ring
+    root.configure(bg=BORDER)            # visible as border ring
     root.minsize(720, 480)
     root.resizable(True, True)
     w, h = 840, 570
@@ -519,7 +519,19 @@ def _timeline_main(cfg: dict):
     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
     _timeline_root[0] = root
 
-    # Container (1-px inset = border ring)
+    # Rounded corners via Win32 SetWindowRgn
+    def _apply_round(r=16):
+        try:
+            hwnd = root.winfo_id()
+            rw, rh = root.winfo_width(), root.winfo_height()
+            rgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, rw + 1, rh + 1, r, r)
+            ctypes.windll.user32.SetWindowRgn(hwnd, rgn, True)
+        except Exception:
+            pass
+    root.bind("<Configure>", lambda e: root.after(10, _apply_round))
+    root.after(80, _apply_round)
+
+    # Container (inset = border ring shows as rounded outline)
     C = tk.Frame(root, bg=BG_WIN)
     C.pack(fill="both", expand=True, padx=1, pady=1)
 
@@ -622,12 +634,12 @@ def _timeline_main(cfg: dict):
              font=("Segoe UI", 8, "bold"), bg=BG_TL, fg=MUTED2).pack(side="left")
     leg = tk.Frame(tl_top, bg=BG_TL)
     leg.pack(side="right")
-    for sym, lbl, col in [("■", "Working", BLUE), ("■", "Idle", RED), ("—", "Now", ORANGE)]:
+    for sym, lbl, col in [("■", "Working", "#22c55e"), ("■", "Idle", "#f43f5e"), ("—", "Now", ORANGE)]:
         tk.Label(leg, text=sym, font=("Segoe UI", 9), bg=BG_TL, fg=col).pack(side="left", padx=(8, 1))
         tk.Label(leg, text=lbl, font=("Segoe UI", 8), bg=BG_TL, fg=MUTED).pack(side="left")
 
-    # Canvas: 44px bar + 24px for ticks + labels
-    cvs = tk.Canvas(tl_sec, height=68, bg=BG_TL, highlightthickness=0)
+    # Canvas: 60px bar + 28px for ticks + labels
+    cvs = tk.Canvas(tl_sec, height=88, bg=BG_TL, highlightthickness=0)
     cvs.pack(fill="x")
 
     # ── Divider ────────────────────────────────────────────
@@ -740,8 +752,8 @@ def _timeline_main(cfg: dict):
         cvs.update_idletasks()
         cvs.delete("all")
         W   = max(cvs.winfo_width(), 1)
-        BAR = 44   # bar occupies y=0..BAR
-        PAD = 5    # vertical padding for activity segments inside the bar
+        BAR = 60   # bar occupies y=0..BAR
+        PAD = 6    # vertical padding for activity segments inside the bar
 
         # Bar track — white with a soft border
         cvs.create_rectangle(0, 0, W, BAR, fill=WHITE, outline=BORDER2, width=1)
@@ -758,7 +770,7 @@ def _timeline_main(cfg: dict):
                         if e_iso else datetime.now(JST)
                 s_min = s_dt.hour * 60 + s_dt.minute + s_dt.second / 60
                 e_min = e_dt.hour * 60 + e_dt.minute + e_dt.second / 60
-                col   = GREEN if seg["status"] == "working" else RED
+                col   = "#22c55e" if seg["status"] == "working" else "#f43f5e"
                 x1 = max(1, s_min / 1440 * W)
                 x2 = min(W - 1, max(x1 + 4, e_min / 1440 * W))
                 cvs.create_rectangle(x1, PAD, x2, BAR - PAD, fill=col, outline="")

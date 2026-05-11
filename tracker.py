@@ -544,6 +544,10 @@ def _timeline_main(cfg: dict):
     tk.Label(badge_f, text=f"● {status_lbl_text}",
              font=("Segoe UI", 8, "bold"), bg=acc_color, fg="white").pack()
 
+    ver = _bundled_defaults().get("version", "")
+    tk.Label(hdr, text=f"v{ver}" if ver else "",
+             font=("Segoe UI", 8), bg=WHITE, fg=MUTED).pack(side="left", padx=(12, 0))
+
     tk.Frame(hdr, bg=WHITE).pack(side="left", fill="x", expand=True)  # flex spacer
 
     # Stats chips

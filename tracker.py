@@ -492,6 +492,9 @@ def _timeline_main(cfg: dict):
     BLUE    = "#2563eb"
     BLUE_L  = "#eff6ff"
     BLUE_B  = "#bfdbfe"
+    GREEN   = "#16a34a"
+    GREEN_L = "#f0fdf4"
+    GREEN_B = "#bbf7d0"
     RED     = "#ef4444"
     RED_L   = "#fef2f2"
     RED_B   = "#fecaca"
@@ -502,7 +505,7 @@ def _timeline_main(cfg: dict):
     state    = {"date": datetime.now(JST).date(), "segs": []}
     drag_d   = {"x": 0, "y": 0}
 
-    acc_color        = BLUE if _status == "working" else (RED if _status == "idle" else MUTED)
+    acc_color        = GREEN if _status == "working" else (RED if _status == "idle" else MUTED)
     status_lbl_text  = _status.capitalize() if _status in ("working", "idle") else "Offline"
 
     # ── Borderless window ─────────────────────────────────
@@ -585,8 +588,8 @@ def _timeline_main(cfg: dict):
         tk.Label(inner, text=sublabel, font=("Segoe UI", 7, "bold"),
                  bg=bg, fg=fg).pack()
 
-    _chip(hdr, work_val, "WORKING", BLUE_L, BLUE, BLUE_B)
-    _chip(hdr, idle_val, "IDLE",    RED_L,  RED,  RED_B)
+    _chip(hdr, work_val, "WORKING", GREEN_L, GREEN, GREEN_B)
+    _chip(hdr, idle_val, "IDLE",    RED_L,   RED,   RED_B)
 
     # Close + Minimize buttons
     def _close():
@@ -755,7 +758,7 @@ def _timeline_main(cfg: dict):
                         if e_iso else datetime.now(JST)
                 s_min = s_dt.hour * 60 + s_dt.minute + s_dt.second / 60
                 e_min = e_dt.hour * 60 + e_dt.minute + e_dt.second / 60
-                col   = BLUE if seg["status"] == "working" else RED
+                col   = GREEN if seg["status"] == "working" else RED
                 x1 = max(1, s_min / 1440 * W)
                 x2 = min(W - 1, max(x1 + 4, e_min / 1440 * W))
                 cvs.create_rectangle(x1, PAD, x2, BAR - PAD, fill=col, outline="")
@@ -840,7 +843,7 @@ def _timeline_main(cfg: dict):
             except Exception:
                 pass
 
-        tree.tag_configure("w", foreground=BLUE, background=WHITE)
+        tree.tag_configure("w", foreground=GREEN, background=WHITE)
         tree.tag_configure("i", foreground=RED,  background=BG_IDLE)
 
         work_val.set(_fmt_dur(work_s) if work_s else "0m")

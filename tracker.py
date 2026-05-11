@@ -905,7 +905,7 @@ def _confirm_dialog(title: str, message: str) -> bool:
 def _start_tray(cfg: dict):
     def _quit(icon, _item):
         icon.stop()
-        os._exit(1)  # non-zero → Task Scheduler treats as failure → restarts in ~1 min
+        os._exit(0)  # repeat trigger restarts within ~1 min regardless of exit code
 
     def _open_timeline(icon, _item):
         _show_timeline(cfg)
@@ -931,21 +931,23 @@ _TASK_NAME = "BlueOrbitTracker"
 
 
 def register_startup():
-    """Register a Task Scheduler task that auto-restarts the tracker if killed."""
+    """Register a Task Scheduler watchdog: fires every 1 min + at logon.
+    Starts the tracker if not running; exits silently if already running."""
     if not getattr(sys, "frozen", False) or sys.platform != "win32":
         return
     exe = sys.executable.replace("'", "''")  # escape single quotes for PowerShell
     ps_cmd = (
         f"$a = New-ScheduledTaskAction -Execute '{exe}' -Argument '--watchdog'; "
-        "$t = New-ScheduledTaskTrigger -AtLogOn; "
-        "$s = New-ScheduledTaskSettingsSet "
-        "  -ExecutionTimeLimit (New-TimeSpan -Hours 0) "
-        "  -RestartCount 999 "
-        "  -RestartInterval (New-TimeSpan -Minutes 1) "
-        "  -StartWhenAvailable "
-        "  -MultipleInstances IgnoreNew; "
-        f"Register-ScheduledTask -TaskName '{_TASK_NAME}' "
-        "  -Action $a -Trigger $t -Settings $s -Force | Out-Null"
+        "$t1 = New-ScheduledTaskTrigger -AtLogOn; "
+        "$t2 = New-ScheduledTaskTrigger -Once -At (Get-Date)"
+        " -RepetitionInterval (New-TimeSpan -Minutes 1)"
+        " -RepetitionDuration (New-TimeSpan -Days 3650); "
+        "$s = New-ScheduledTaskSettingsSet"
+        " -ExecutionTimeLimit (New-TimeSpan -Minutes 1)"
+        " -StartWhenAvailable"
+        " -MultipleInstances Parallel; "
+        f"Register-ScheduledTask -TaskName '{_TASK_NAME}'"
+        " -Action $a -Trigger @($t1, $t2) -Settings $s -Force | Out-Null"
     )
     try:
         subprocess.run(
@@ -954,7 +956,7 @@ def register_startup():
             creationflags=subprocess.CREATE_NO_WINDOW,
             timeout=30,
         )
-        _log("Registered Task Scheduler task (auto-restart on kill).")
+        _log("Registered Task Scheduler watchdog (fires every 1 min).")
     except Exception as e:
         _log(f"Could not register scheduled task: {e}")
     # Remove legacy registry Run key if present

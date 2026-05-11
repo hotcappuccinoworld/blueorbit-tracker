@@ -2,5 +2,5 @@
   "serverUrl": "https://api.blueorbit.solar/api",
   "apiKey": "blueorbit",
   "userName": "",
-  "version": "1.3.0"
+  "version": "1.3.1"
 }
